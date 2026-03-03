@@ -172,15 +172,24 @@ class PlotWidget(QWidget):
         self._color_idx += 1
         return color
     
-    def _create_time_axis(self, data, sample_rate: float, start: float = None, end: float = None, tm_type: str = None) -> np.ndarray:
+    def _create_time_axis(self, data, sample_rate: float, start: float = None, end: float = None, tm_type: str = None, epoched: bin = False) -> np.ndarray:
         """Create time axis in seconds."""
         
-        if tm_type == 'seconds':
-            return np.arange(start/sample_rate,end/sample_rate,((end-start)/sample_rate)/(end-start))
-        else: 
-            return np.arange(start, end, 1)
+        if epoched == True:
+            
+            if tm_type == 'seconds':
+                return np.arange(start/sample_rate,end/sample_rate,((end-start)/sample_rate)/(end-start))
+            else: 
+                return np.arange(start, end, 1)
+            
+        else:
+            if tm_type == 'seconds':
+                return np.arange(0,len(data)/128,(len(data)/128)/(len(data)))
+            else:
+                return np.arange(0,len(data),1)
+            
     
-    def plot_single(
+    def plot_single_epoched(
         self, 
         data: np.ndarray, 
         title: str = "",
@@ -209,7 +218,7 @@ class PlotWidget(QWidget):
         
         
         # set timeframe first before cutting data
-        time = self._create_time_axis(data, sample_rate, start=start, end=end,tm_type=tm_type) # this time is duration of epoch, not actual time from original onset
+        time = self._create_time_axis(data, sample_rate, start=start, end=end,tm_type=tm_type, epoched=True) # this time is duration of epoch, not actual time from original onset
         
         if end > 0:
             data = data[start:end]
@@ -237,6 +246,59 @@ class PlotWidget(QWidget):
         self.cursor_label.setStyleSheet(
             "font-family: monospace; padding: 2px 8px; background-color: #f0f0f0; border-radius: 3px;"
         )
+        
+    def plot_single(
+        self, 
+        data: np.ndarray, 
+        title: str = "",
+        sample_rate: float = 128.0,
+        tm_type: str = None,
+        color: Optional[tuple] = None
+    ):
+        """
+        Plot a single trace (clears existing traces).
+        
+        Args:
+            data: 1D array of values
+            title: Plot title
+            sample_rate: Sampling rate for time axis
+            color: RGB tuple, or None for auto-color
+        """
+        self.clear()
+        self.sample_rate = sample_rate
+        
+        # Store for click lookup
+       
+
+        
+        
+        # set timeframe first before cutting data
+        time = self._create_time_axis(data, sample_rate, tm_type=tm_type, epoched=False) # this time is duration of epoch, not actual time from original onset
+        
+            
+        self._current_data = data.copy()
+        self._current_sample_rate = sample_rate
+        
+              
+        if color is None:
+            color = self.COLORS[0]
+        
+        pen = pg.mkPen(color=color, width=1.5)
+        trace = self.plot_widget.plot(time, data, pen=pen, name=title)
+        self._traces.append(trace)
+        
+        self.plot_widget.setTitle(title)
+        self._auto_range()
+        #self.set_x_range(start,end,tm_type)
+        
+        
+        # Reset cursor label style
+        self.cursor_label.setStyleSheet(
+            "font-family: monospace; padding: 2px 8px; background-color: #f0f0f0; border-radius: 3px;"
+        )
+        
+        
+        
     
     def add_trace(
         self, 
@@ -255,7 +317,6 @@ class PlotWidget(QWidget):
             color: RGB tuple, or None for auto-color
         """
         time = self._create_time_axis(len(data), sample_rate)
-        logging.debug
         
         if color is None:
             color = self._get_next_color()

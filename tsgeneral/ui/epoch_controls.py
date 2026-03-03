@@ -169,6 +169,9 @@ class EpochControlWidget(QWidget):
         end = self._display_to_samples(self.end_spin.value())
         tm_type = self._get_unit()
         
+        if start==0 and end == 0:
+            return (None, None, tm_type)
+        
         return (start, end, tm_type)
     
     def set_max_samples(self, max_samples: int):

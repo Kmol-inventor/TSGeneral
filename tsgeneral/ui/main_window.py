@@ -146,19 +146,27 @@ class MainWindow(QMainWindow):
             
             # Apply epoch if set
             start, end, tm_type = self.epoch_widget.get_epoch()   ## PASS START & END WITH DATA
-            logging.debug(f"start: {start}, end: {end}, tm_type: {tm_type}")
+            if start is not None and end is not None:
+                logging.debug(f"start: {start}, end: {end}, tm_type: {tm_type}")
             #if end > 0:
             #   data = data[start:end]
             
             
-            self.plot_widget.plot_single(  
-                data, 
-                title=f"{row_label} {trial + 1} → {stage_name}",
-                sample_rate=self.inspector.sample_rate,
-                start=start,
-                end=end,
-                tm_type= tm_type
-            )
+                self.plot_widget.plot_single_epoched(  
+                    data, 
+                    title=f"{row_label} {trial + 1} → {stage_name}",
+                    sample_rate=self.inspector.sample_rate,
+                    start=start,
+                    end=end,
+                    tm_type= tm_type
+                )
+            else:
+                self.plot_widget.plot_single(
+                    data,
+                    title=f"{row_label} {trial + 1} → {stage_name}",
+                    sample_rate=self.inspector.sample_rate,
+                    
+                )
             
             self._update_status(
                 f"{row_label} {trial + 1} | {stage_name} | "
