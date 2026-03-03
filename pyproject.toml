@@ -1,0 +1,55 @@
+[project]
+name = "tsgeneral"
+version = "0.1.0"
+description = "TSGeneral - A lightweight native desktop app for inspecting time-series data through filter pipelines"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "TSGeneral Contributors"}
+]
+keywords = ["eeg", "time-series", "visualization", "signal-processing", "inspector"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+
+dependencies = [
+    "numpy>=1.20.0",
+    "pandas>=1.3.0",
+    "PySide6>=6.5.0",
+    "pyqtgraph>=0.13.0",
+    "scipy>=1.7.0",
+    "matplotlib>=3.10.8",
+    "markdown>=3.10.1",
+    "pytest>=9.0.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-qt>=4.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/kmol-inventor/tsgeneral"
+Documentation = "https://github.com/kmol-inventor/tsgeneral#readme"
+Repository = "https://github.com/kmol-inventor/tsgeneral"
+Issues = "https://github.com/kmol-inventor/tsgeneral/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["tsgeneral"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+qt_api = "pyside6"

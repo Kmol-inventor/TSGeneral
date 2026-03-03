@@ -1,0 +1,29 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.vscode
+# Markdown & txt files
+*.md
+*.txt
+
+.test
+# Test data (may contain personal EEG data)
+test/*
+
+test/test_data/*
+#!test/test_data/
+test/test_filters/*
+#!test/test_filters/
+
+test/test_scripts
+
+# Files to access in folders
+!test/test_filters/bci_filters.py
+!test/test_data/Jaw_clench_5_readable.csv
