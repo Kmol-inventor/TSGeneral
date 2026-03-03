@@ -184,7 +184,7 @@ class PlotWidget(QWidget):
             
         else:
             if tm_type == 'seconds':
-                return np.arange(0,len(data)/128,(len(data)/128)/(len(data)))
+                return np.arange(0,len(data)/sample_rate,(len(data)/sample_rate)/(len(data)))
             else:
                 return np.arange(0,len(data),1)
             
