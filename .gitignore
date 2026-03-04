@@ -8,22 +8,16 @@ wheels/
 
 # Virtual environments
 .venv
-.vscode
-# Markdown & txt files
-*.md
-*.txt
 
-.test
-# Test data (may contain personal EEG data)
-test/*
+# IDE
+.vscode/
 
-test/test_data/*
-#!test/test_data/
-test/test_filters/*
-#!test/test_filters/
+# Personal notes
+todo.txt
 
-test/test_scripts
+# Development docs (local only)
+docs/
 
-# Files to access in folders
-!test/test_filters/bci_filters.py
+# Test folder (local development only)
+test/
 !test/test_data/Jaw_clench_5_readable.csv
