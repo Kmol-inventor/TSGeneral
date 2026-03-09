@@ -109,6 +109,32 @@ Inspector(data, pipeline, sample_rate=128.0).run()
 - **Multi-Selection** - Ctrl+Click to select multiple, then overlay or average
 - **Epoch Controls** - Zoom into specific time windows
 - **Statistics** - Each cell shows μ, σ, min, max
+- **Performance Profiler** - Identify bottlenecks in your pipeline
+
+## Performance Profiler
+
+Find out which filter stages are slow with built-in profiling:
+
+```python
+# Enable profiling
+inspector = Inspector(data, pipeline, profile=True)
+inspector.run()
+
+# Print performance report
+inspector.print_performance_report()
+```
+
+Output:
+```
+Stage                      Time        %    Calls
+----------------------------------------------------
+Raw                      0.001s     1.9%      100
+Baseline                 0.005s    20.5%      100
+Gaussian                 0.008s    35.2%      100 ⚠️
+Z-Score                  0.008s    34.0%      100
+
+⚠️  Bottleneck: Gaussian (35.2% of total time)
+```
 
 ## Filter Signatures
 
@@ -135,9 +161,11 @@ tsgeneral/
 │   ├── inspector.py    # Main Inspector class
 │   ├── pipeline.py     # Stateless Pipeline
 │   ├── stateful_pipeline.py  # StatefulPipeline for class-based filters
+│   ├── profiler.py     # Performance profiler
 │   └── ui/             # PySide6 GUI components
 └── examples/
     ├── basic_usage.py  # Simple getting started example
+    ├── profiler_example.py  # Performance profiling demo
     └── bci_jaw_clench/ # Real EEG processing example
         ├── bci_filters.py      # Custom EEG filter pipeline
         ├── sample_eeg_data.csv # 14-channel Emotiv EEG data

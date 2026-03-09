@@ -9,6 +9,7 @@ from typing import Optional, Union, TYPE_CHECKING
 
 from .pipeline import Pipeline
 from .stateful_pipeline import StatefulPipeline
+from .profiler import Profiler, ProfileReport
 
 
 # Type alias for either pipeline type
@@ -53,6 +54,8 @@ class Inspector:
         sample_rate: float = 128.0,
         row_label: str = "Trial",
         row_names: Optional[list[str]] = None,
+        profile: bool = False,
+        profiler: Optional[Profiler] = None,
     ):
         """
         Initialize the Inspector.
@@ -68,12 +71,22 @@ class Inspector:
             sample_rate: Sampling rate in Hz (for time axis display)
             row_label: Label for rows - "Trial", "Channel", "Epoch", or custom
             row_names: Optional list of names for each row (e.g., channel names)
+            profile: Enable profiling (creates internal Profiler if True)
+            profiler: Use an existing Profiler instance (overrides profile=True)
         """
         self.sample_rate = sample_rate
         self.trial_axis = trial_axis
         self.pipeline = pipeline or self._default_pipeline()
         self.row_label = row_label
         self.row_names = row_names
+        
+        # Profiling
+        if profiler is not None:
+            self.profiler = profiler
+        elif profile:
+            self.profiler = Profiler()
+        else:
+            self.profiler = None
         
         # Store processed data
         self._raw_data: Optional[np.ndarray] = None
@@ -123,10 +136,19 @@ class Inspector:
         if self._raw_data is None:
             return
         
+        # Start profiler if enabled
+        if self.profiler is not None:
+            self.profiler.start()
+        
         self._processed_data = self.pipeline.process_trials(
             self._raw_data, 
-            axis=0  # Already normalized
+            axis=0,  # Already normalized
+            profiler=self.profiler
         )
+        
+        # Stop profiler if enabled
+        if self.profiler is not None:
+            self.profiler.stop()
     
     @property
     def n_trials(self) -> int:
@@ -198,6 +220,57 @@ class Inspector:
         min_len = min(len(a) for a in arrays)
         trimmed = [a[:min_len] for a in arrays]
         return np.mean(trimmed, axis=0)
+    
+    # =========================================================================
+    # Profiling API
+    # =========================================================================
+    
+    def get_performance_report(self) -> Optional[ProfileReport]:
+        """
+        Get the performance profiling report.
+        
+        Returns:
+            ProfileReport object with timing/memory data, or None if profiling disabled
+            
+        Example:
+            inspector = Inspector(data, pipeline, profile=True)
+            inspector.run()
+            
+            report = inspector.get_performance_report()
+            print(f"Total time: {report.total_time:.2f}s")
+            print(f"Bottleneck: {report.get_bottleneck().name}")
+        """
+        if self.profiler is None:
+            return None
+        return self.profiler.get_report()
+    
+    def print_performance_report(self, show_memory: bool = True):
+        """
+        Print a formatted performance report to stdout.
+        
+        Args:
+            show_memory: Whether to include memory column
+            
+        Example:
+            inspector = Inspector(data, pipeline, profile=True)
+            inspector.run()
+            inspector.print_performance_report()
+        """
+        if self.profiler is None:
+            print("Profiling not enabled. Use Inspector(..., profile=True)")
+            return
+        self.profiler.print_report(show_memory=show_memory)
+    
+    def get_performance_summary(self) -> str:
+        """
+        Get a one-line performance summary.
+        
+        Returns:
+            Summary string like "5.2s total, bottleneck: Gaussian (80%)"
+        """
+        if self.profiler is None:
+            return "Profiling not enabled"
+        return self.profiler.get_summary()
     
     def run(self):
         """

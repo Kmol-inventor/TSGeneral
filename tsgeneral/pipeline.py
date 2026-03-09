@@ -3,8 +3,11 @@ Pipeline module - defines the filter pipeline structure.
 """
 
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Any, Union
+from typing import Callable, Optional, Any, Union, TYPE_CHECKING
 import numpy as np
+
+if TYPE_CHECKING:
+    from .profiler import Profiler
 
 
 @dataclass
@@ -84,7 +87,7 @@ class Pipeline:
         self.stages.append(stage)
         return self
     
-    def process(self, data: np.ndarray) -> list[np.ndarray]:
+    def process(self, data: np.ndarray, profiler: Optional["Profiler"] = None) -> list[np.ndarray]:
         """
         Run data through all stages sequentially.
         
@@ -92,6 +95,7 @@ class Pipeline:
         
         Args:
             data: Input array (single trial)
+            profiler: Optional Profiler instance to collect timing data
             
         Returns:
             List of arrays, one per stage
@@ -100,12 +104,21 @@ class Pipeline:
         current = data
         
         for stage in self.stages:
-            current = stage.apply(current)
+            if profiler is not None:
+                with profiler.stage(stage.name):
+                    current = stage.apply(current)
+            else:
+                current = stage.apply(current)
             results.append(current)
         
         return results
     
-    def process_trials(self, trials: np.ndarray, axis: int = 0) -> np.ndarray:
+    def process_trials(
+        self, 
+        trials: np.ndarray, 
+        axis: int = 0,
+        profiler: Optional["Profiler"] = None
+    ) -> list[list[np.ndarray]]:
         """
         Process multiple trials through the pipeline.
         
@@ -114,9 +127,10 @@ class Pipeline:
             axis: Which axis represents trials. 
                   0 = rows are trials (n_trials, n_samples)
                   1 = columns are trials (n_samples, n_trials)
+            profiler: Optional Profiler instance to collect timing data
                   
         Returns:
-            3D array of shape (n_trials, n_stages, n_samples)
+            List of lists: results[trial_idx][stage_idx] = array
         """
         if axis == 1:
             trials = trials.T  # Convert to (n_trials, n_samples)
@@ -131,7 +145,7 @@ class Pipeline:
         
         for trial_idx in range(n_trials):
             trial_data = trials[trial_idx]
-            stage_results = self.process(trial_data)
+            stage_results = self.process(trial_data, profiler=profiler)
             results.append(stage_results)
         
         return results  # List of lists for now (handles variable lengths)
