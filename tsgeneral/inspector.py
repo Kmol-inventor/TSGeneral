@@ -54,12 +54,14 @@ class Inspector:
         sample_rate: float = 128.0,
         row_label: str = "Trial",
         row_names: Optional[list[str]] = None,
+        markers: Optional[list[dict]] = None,
+        layers: Optional[dict[str, np.ndarray]] = None,
         profile: bool = False,
         profiler: Optional[Profiler] = None,
     ):
         """
         Initialize the Inspector.
-        
+
         Args:
             data: Input data as numpy array or pandas DataFrame.
                   Shape should be (n_rows, n_samples) if trial_axis=0
@@ -71,6 +73,14 @@ class Inspector:
             sample_rate: Sampling rate in Hz (for time axis display)
             row_label: Label for rows - "Trial", "Channel", "Epoch", or custom
             row_names: Optional list of names for each row (e.g., channel names)
+            markers: Optional per-row markers for vertical lines on plots.
+                     List of dicts, one per row, each with keys like:
+                     {"onset": sample_index, "offset": sample_index}
+                     Sample indices are relative to the row's data.
+            layers: Optional named data layers (e.g., EEG channels).
+                    Dict mapping layer_name → (n_rows, n_samples) array.
+                    When provided, a dropdown lets the user switch layers.
+                    The ``data`` argument becomes the initially selected layer.
             profile: Enable profiling (creates internal Profiler if True)
             profiler: Use an existing Profiler instance (overrides profile=True)
         """
@@ -79,7 +89,13 @@ class Inspector:
         self.pipeline = pipeline or self._default_pipeline()
         self.row_label = row_label
         self.row_names = row_names
-        
+        self.markers = markers
+
+        # Layers (switchable data sets, e.g. EEG channels)
+        self._layers: Optional[dict[str, np.ndarray]] = layers
+        self._layer_names: list[str] = list(layers.keys()) if layers else []
+        self._current_layer: Optional[str] = None
+
         # Profiling
         if profiler is not None:
             self.profiler = profiler
@@ -87,11 +103,11 @@ class Inspector:
             self.profiler = Profiler()
         else:
             self.profiler = None
-        
+
         # Store processed data
         self._raw_data: Optional[np.ndarray] = None
         self._processed_data: Optional[list] = None
-        
+
         if data is not None:
             self.load_data(data)
     
@@ -168,6 +184,48 @@ class Inspector:
     def n_stages(self) -> int:
         """Number of stages in the pipeline."""
         return len(self.pipeline)
+
+    @property
+    def layer_names(self) -> list[str]:
+        """Names of available layers (empty if no layers)."""
+        return self._layer_names
+
+    @property
+    def current_layer(self) -> Optional[str]:
+        """Currently active layer name, or None."""
+        return self._current_layer
+
+    def switch_layer(self, name: str) -> "Inspector":
+        """Switch to a different data layer and reprocess.
+
+        Args:
+            name: Layer name (must be in ``layer_names``).
+
+        Returns:
+            self (for method chaining).
+        """
+        if self._layers is None or name not in self._layers:
+            raise ValueError(f"Unknown layer: {name}. Available: {self._layer_names}")
+        self._current_layer = name
+        self._raw_data = self._layers[name]
+        self._process_data()
+        return self
+
+    def average_all_layers(self) -> "Inspector":
+        """Average across all layers and reprocess.
+
+        Useful for e.g. averaging all EEG channels into one view.
+
+        Returns:
+            self (for method chaining).
+        """
+        if self._layers is None or not self._layers:
+            raise ValueError("No layers available")
+        arrays = list(self._layers.values())
+        self._current_layer = None
+        self._raw_data = np.mean(arrays, axis=0)
+        self._process_data()
+        return self
     
     def get_cell_data(self, trial: int, stage: int) -> np.ndarray:
         """

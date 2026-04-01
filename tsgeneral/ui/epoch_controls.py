@@ -22,15 +22,21 @@ class EpochControlWidget(QWidget):
         epoch_changed: Emitted when epoch range changes (start_sample, end_sample)
     """
     
-    epoch_changed = Signal(int, int, str)  # start, end in samples
+    epoch_changed = Signal(object, object, str)  # start, end (int or None), tm_type
+    unit_changed = Signal(str)  # emitted when just the display unit changes
     
     def __init__(self, max_samples: int = 10000, sample_rate: float = 128.0, parent=None):
         super().__init__(parent)
         self.max_samples = max_samples
         self.sample_rate = sample_rate
-        
+        self._initializing = True
+
         self._setup_ui()
         self._update_ranges()
+        # Ensure spinboxes start at 0 (no epoch)
+        self.start_spin.setValue(0)
+        self.end_spin.setValue(0)
+        self._initializing = False
     
     def _setup_ui(self):
         """Set up the controls."""
@@ -129,9 +135,19 @@ class EpochControlWidget(QWidget):
         self._update_info()
     
     def _on_unit_changed(self):
-        """Handle unit change - convert current values."""
+        """Handle unit change - reset to full trace in the new unit and notify."""
+        # Reset to 0/0 (full trace) to avoid stale values from the old unit
+        self.start_spin.blockSignals(True)
+        self.end_spin.blockSignals(True)
         self._update_ranges()
+        self.start_spin.setValue(0)
+        self.end_spin.setValue(0)
+        self.start_spin.blockSignals(False)
+        self.end_spin.blockSignals(False)
         self._update_info()
+        # Signal that the display unit changed (so plot re-renders its X axis)
+        if not self._initializing:
+            self.unit_changed.emit(self._get_unit())
     
     def _on_value_changed(self):
         """Handle spin box value changes."""
@@ -154,6 +170,8 @@ class EpochControlWidget(QWidget):
     
     def _emit_epoch(self):
         """Emit the epoch_changed signal."""
+        if self._initializing:
+            return
         start, end, tm_type = self.get_epoch()
         self.epoch_changed.emit(start, end, tm_type)
     

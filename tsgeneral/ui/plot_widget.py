@@ -59,10 +59,12 @@ class PlotWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._traces: list[pg.PlotDataItem] = []
+        self._marker_lines: list[pg.InfiniteLine] = []
+        self._marker_labels: list[pg.TextItem] = []
         self._color_idx = 0
         self._current_data: Optional[np.ndarray] = None
         self._current_sample_rate: float = 128.0
-        
+
         self._setup_ui()
         self._setup_crosshair()
     
@@ -172,26 +174,44 @@ class PlotWidget(QWidget):
         self._color_idx += 1
         return color
     
-    def _create_time_axis(self, data, sample_rate: float, start: float = None, end: float = None, tm_type: str = None, epoched: bin = False) -> np.ndarray:
-        """Create time axis in seconds."""
-        
-        if epoched == True:
-            
-            if tm_type == 'seconds':
-                return np.arange(start/sample_rate,end/sample_rate,((end-start)/sample_rate)/(end-start))
-            else: 
-                return np.arange(start, end, 1)
-            
-        else:
-            if tm_type == 'seconds':
-                return np.arange(0,len(data)/sample_rate,(len(data)/sample_rate)/(len(data)))
+    def _create_time_axis(self, data, sample_rate: float, start: float = None, end: float = None, tm_type: str = None, epoched: bool = False) -> np.ndarray:
+        """Create time axis in the requested unit.
+
+        Args:
+            data: The data array (used for length when not epoched).
+            sample_rate: Sampling rate in Hz.
+            start: Start sample index (epoched only).
+            end: End sample index (epoched only).
+            tm_type: 'samples', 'seconds', or 'ms'. None defaults to samples.
+            epoched: Whether this is a sliced epoch.
+        """
+        n = len(data)
+
+        if epoched and start is not None and end is not None and end > start:
+            n_epoch = end - start
+            if tm_type == "seconds":
+                t0 = start / sample_rate
+                t1 = end / sample_rate
+                return np.linspace(t0, t1, n_epoch, endpoint=False)
+            elif tm_type == "ms":
+                t0 = (start / sample_rate) * 1000
+                t1 = (end / sample_rate) * 1000
+                return np.linspace(t0, t1, n_epoch, endpoint=False)
             else:
-                return np.arange(0,len(data),1)
+                return np.arange(start, end, 1)
+        else:
+            # Full trace
+            if tm_type == "seconds":
+                return np.linspace(0, n / sample_rate, n, endpoint=False)
+            elif tm_type == "ms":
+                return np.linspace(0, (n / sample_rate) * 1000, n, endpoint=False)
+            else:
+                return np.arange(0, n, 1)
             
     
     def plot_single_epoched(
-        self, 
-        data: np.ndarray, 
+        self,
+        data: np.ndarray,
         title: str = "",
         sample_rate: float = 128.0,
         start: float = None,
@@ -200,99 +220,100 @@ class PlotWidget(QWidget):
         color: Optional[tuple] = None
     ):
         """
-        Plot a single trace (clears existing traces).
-        
+        Plot an epoched (sliced) trace.
+
         Args:
-            data: 1D array of values
-            title: Plot title
-            sample_rate: Sampling rate for time axis
-            color: RGB tuple, or None for auto-color
+            data: 1D array of full-trace values.
+            title: Plot title.
+            sample_rate: Sampling rate for time axis.
+            start: Start sample index for the slice.
+            end: End sample index for the slice (0 or None = full trace).
+            tm_type: Time unit ('samples', 'seconds', 'ms').
+            color: RGB tuple, or None for auto-color.
         """
         self.clear()
         self.sample_rate = sample_rate
-        
-        # Store for click lookup
-       
+
         logging.debug(f"from plot_widget start: {start}, end: {end}, tm_type: {tm_type}")
 
-        
-        
-        # set timeframe first before cutting data
-        time = self._create_time_axis(data, sample_rate, start=start, end=end,tm_type=tm_type, epoched=True) # this time is duration of epoch, not actual time from original onset
-        
-        if end > 0:
-            data = data[start:end]
-            
+        # Treat end=0 or end=None as "full trace"
+        if end is None or end <= 0:
+            end = len(data)
+        if start is None or start < 0:
+            start = 0
+        # Clamp
+        start = min(start, len(data))
+        end = min(end, len(data))
+        if start >= end:
+            start = 0
+
+        # Slice data to epoch range
+        data = data[start:end]
+
+        # Build matching time axis
+        time = self._create_time_axis(
+            data, sample_rate, start=start, end=end,
+            tm_type=tm_type, epoched=True,
+        )
+
         self._current_data = data.copy()
         self._current_sample_rate = sample_rate
-        
-        
-        
-        logging.debug(f"time begin = {time[0]}, time end = {time[-1]}")
-        
+
+        if len(time) > 0 and len(data) > 0:
+            logging.debug(f"time begin = {time[0]}, time end = {time[-1]}")
+
         if color is None:
             color = self.COLORS[0]
-        
+
         pen = pg.mkPen(color=color, width=1.5)
         trace = self.plot_widget.plot(time, data, pen=pen, name=title)
         self._traces.append(trace)
-        
+
         self.plot_widget.setTitle(title)
+        self._update_axis_label(tm_type)
         self._auto_range()
-        #self.set_x_range(start,end,tm_type)
-        
-        
-        # Reset cursor label style
+
         self.cursor_label.setStyleSheet(
             "font-family: monospace; padding: 2px 8px; background-color: #f0f0f0; border-radius: 3px;"
         )
         
     def plot_single(
-        self, 
-        data: np.ndarray, 
+        self,
+        data: np.ndarray,
         title: str = "",
         sample_rate: float = 128.0,
         tm_type: str = None,
         color: Optional[tuple] = None
     ):
         """
-        Plot a single trace (clears existing traces).
-        
+        Plot a single full trace (clears existing traces).
+
         Args:
-            data: 1D array of values
-            title: Plot title
-            sample_rate: Sampling rate for time axis
-            color: RGB tuple, or None for auto-color
+            data: 1D array of values.
+            title: Plot title.
+            sample_rate: Sampling rate for time axis.
+            tm_type: Time unit ('samples', 'seconds', 'ms').
+            color: RGB tuple, or None for auto-color.
         """
         self.clear()
         self.sample_rate = sample_rate
-        
-        # Store for click lookup
-       
 
-        
-        
-        # set timeframe first before cutting data
-        time = self._create_time_axis(data, sample_rate, tm_type=tm_type, epoched=False) # this time is duration of epoch, not actual time from original onset
-        
-            
+        time = self._create_time_axis(data, sample_rate, tm_type=tm_type, epoched=False)
+
         self._current_data = data.copy()
         self._current_sample_rate = sample_rate
-        
-              
+
         if color is None:
             color = self.COLORS[0]
-        
+
         pen = pg.mkPen(color=color, width=1.5)
         trace = self.plot_widget.plot(time, data, pen=pen, name=title)
         self._traces.append(trace)
-        
+
         self.plot_widget.setTitle(title)
+        self._update_axis_label(tm_type)
         self._auto_range()
-        #self.set_x_range(start,end,tm_type)
-        
-        
-        # Reset cursor label style
+
         self.cursor_label.setStyleSheet(
             "font-family: monospace; padding: 2px 8px; background-color: #f0f0f0; border-radius: 3px;"
         )
@@ -328,6 +349,59 @@ class PlotWidget(QWidget):
         if len(self._traces) > 1:
             self.plot_widget.setTitle(f"Overlay: {len(self._traces)} traces")
     
+    def set_markers(
+        self,
+        markers: dict[str, float],
+        sample_rate: float | None = None,
+    ):
+        """Add vertical marker lines to the plot.
+
+        Args:
+            markers: Dict mapping label → position in seconds on the
+                     plot's time axis. E.g. {"onset": 0.5, "offset": 4.5}.
+            sample_rate: Override sample rate (unused currently, positions
+                         are already in seconds).
+        """
+        self.clear_markers()
+
+        marker_colors = {
+            "onset": (214, 39, 40),     # Red
+            "offset": (31, 119, 180),   # Blue
+        }
+        default_color = (127, 127, 127)  # Gray
+
+        for label, time_s in markers.items():
+            color = marker_colors.get(label, default_color)
+            pen = pg.mkPen(color=color, width=2, style=Qt.PenStyle.DashDotLine)
+            vline = pg.InfiniteLine(angle=90, movable=False, pen=pen)
+            vline.setPos(time_s)
+            self.plot_widget.addItem(vline, ignoreBounds=True)
+            self._marker_lines.append(vline)
+
+            # Add text label near the top of the plot
+            text = pg.TextItem(label, color=color, anchor=(0.5, 1.0))
+            text.setPos(time_s, 0)
+            self.plot_widget.addItem(text, ignoreBounds=True)
+            self._marker_labels.append(text)
+
+    def clear_markers(self):
+        """Remove all marker lines and labels."""
+        for item in self._marker_lines:
+            self.plot_widget.removeItem(item)
+        self._marker_lines.clear()
+        for item in self._marker_labels:
+            self.plot_widget.removeItem(item)
+        self._marker_labels.clear()
+
+    def _position_marker_labels(self):
+        """Reposition marker labels to sit at the top of the visible Y range."""
+        vb = self.plot_widget.plotItem.vb
+        y_range = vb.viewRange()[1]
+        y_top = y_range[1] if y_range else 0
+        for text_item in self._marker_labels:
+            pos = text_item.pos()
+            text_item.setPos(pos.x(), y_top)
+
     def clear(self):
         """Clear all traces from the plot."""
         for trace in self._traces:
@@ -335,11 +409,21 @@ class PlotWidget(QWidget):
         self._traces.clear()
         self._color_idx = 0
         self.plot_widget.setTitle("")
-        
+        self.clear_markers()
+
         # Clear and recreate legend
         if self.legend is not None:
             self.legend.clear()
     
+    def _update_axis_label(self, tm_type: str | None):
+        """Update the X-axis label to match the current time unit."""
+        if tm_type == "seconds":
+            self.plot_widget.setLabel("bottom", "Time", units="s")
+        elif tm_type == "ms":
+            self.plot_widget.setLabel("bottom", "Time", units="ms")
+        else:
+            self.plot_widget.setLabel("bottom", "Samples")
+
     def _auto_range(self):
         """Auto-scale the plot to fit all data."""
         self.plot_widget.autoRange()

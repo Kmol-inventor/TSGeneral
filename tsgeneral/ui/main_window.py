@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QSplitter, QToolBar, QLabel, QSpinBox, QPushButton, QStatusBar,
-    QMessageBox
+    QMessageBox, QComboBox
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QShortcut, QKeySequence
@@ -75,10 +75,29 @@ class MainWindow(QMainWindow):
             sample_rate=self.inspector.sample_rate
         )
         self.epoch_widget.epoch_changed.connect(self._on_epoch_changed)
+        self.epoch_widget.unit_changed.connect(self._on_unit_changed)
         toolbar.addWidget(self.epoch_widget)
         
         toolbar.addSeparator()
-        
+
+        # Layer selector (e.g., EEG channels)
+        self.layer_combo = None
+        if self.inspector.layer_names:
+            toolbar.addWidget(QLabel("Channel:"))
+            self.layer_combo = QComboBox()
+            self.layer_combo.addItem("All (avg)")
+            self.layer_combo.addItems(self.inspector.layer_names)
+            # Default to first real layer (index 1, after "All (avg)")
+            if self.inspector.current_layer:
+                idx = self.inspector.layer_names.index(self.inspector.current_layer) + 1
+                self.layer_combo.setCurrentIndex(idx)
+            else:
+                self.layer_combo.setCurrentIndex(1)
+            self.layer_combo.currentTextChanged.connect(self._on_layer_changed)
+            self.layer_combo.setMinimumWidth(80)
+            toolbar.addWidget(self.layer_combo)
+            toolbar.addSeparator()
+
         # Average all rows button
         self.avg_all_button = QPushButton("Average All Rows")
         self.avg_all_button.clicked.connect(self._on_average_all_rows)
@@ -143,31 +162,50 @@ class MainWindow(QMainWindow):
             stats = self.inspector.get_cell_stats(trial, stage)
             stage_name = self.inspector.pipeline[stage].name
             row_label = self.inspector.row_label
-            
-            # Apply epoch if set
-            start, end, tm_type = self.epoch_widget.get_epoch()   ## PASS START & END WITH DATA
+
+            # Get epoch range and time unit from controls
+            start, end, tm_type = self.epoch_widget.get_epoch()
+
             if start is not None and end is not None:
                 logging.debug(f"start: {start}, end: {end}, tm_type: {tm_type}")
-            #if end > 0:
-            #   data = data[start:end]
-            
-            
-                self.plot_widget.plot_single_epoched(  
-                    data, 
+                self.plot_widget.plot_single_epoched(
+                    data,
                     title=f"{row_label} {trial + 1} → {stage_name}",
                     sample_rate=self.inspector.sample_rate,
                     start=start,
                     end=end,
-                    tm_type= tm_type
+                    tm_type=tm_type,
                 )
             else:
+                # No epoch range set — plot full trace, but respect time unit
                 self.plot_widget.plot_single(
                     data,
                     title=f"{row_label} {trial + 1} → {stage_name}",
                     sample_rate=self.inspector.sample_rate,
-                    
+                    tm_type=tm_type,
                 )
-            
+
+            # Draw markers if the inspector has per-row markers
+            if self.inspector.markers and trial < len(self.inspector.markers):
+                row_markers = self.inspector.markers[trial]
+                if row_markers:
+                    sr = self.inspector.sample_rate
+                    # Convert sample indices to the same unit as the plot X axis
+                    if tm_type == "seconds":
+                        plot_markers = {
+                            label: idx / sr for label, idx in row_markers.items()
+                        }
+                    elif tm_type == "ms":
+                        plot_markers = {
+                            label: (idx / sr) * 1000 for label, idx in row_markers.items()
+                        }
+                    else:
+                        plot_markers = {
+                            label: float(idx) for label, idx in row_markers.items()
+                        }
+                    self.plot_widget.set_markers(plot_markers)
+                    self.plot_widget._position_marker_labels()
+
             self._update_status(
                 f"{row_label} {trial + 1} | {stage_name} | "
                 f"μ={stats['mean']:.3f} σ={stats['std']:.3f} | "
@@ -203,12 +241,12 @@ class MainWindow(QMainWindow):
         avg_data = self.inspector.get_averaged_data(trials, stage)
         stage_name = self.inspector.pipeline[stage].name
         row_label = self.inspector.row_label
-        
+
         # Apply epoch if set
         start, end, tm_type = self.epoch_widget.get_epoch()
-        if end > 0:
+        if end is not None and end > 0:
             avg_data = avg_data[start:end]
-        
+
         self.plot_widget.plot_single(
             avg_data,
             title=f"Average of {len(trials)} {row_label}s → {stage_name}",
@@ -246,7 +284,7 @@ class MainWindow(QMainWindow):
         
         for trial, stage in self.selected_cells:
             data = self.inspector.get_cell_data(trial, stage)
-            if end > 0:
+            if end is not None and end > 0:
                 data = data[start:end]
             
             stage_name = self.inspector.pipeline[stage].name
@@ -264,14 +302,40 @@ class MainWindow(QMainWindow):
         
         self._update_status(f"Overlaying {len(self.selected_cells)} traces")
     
-    def _on_epoch_changed(self, start: int, end: int):
-        """Handle epoch change - update current plot."""
-        # Re-plot current selection with new epoch
+    def _on_epoch_changed(self, start: object, end: object):
+        """Handle epoch range change - update current plot."""
         if self.selected_cells:
-            if len(self.selected_cells) == 1:
-                trial, stage = self.selected_cells[0]
-                self._on_cell_clicked(trial, stage)
+            trial, stage = self.selected_cells[-1]
+            self._on_cell_clicked(trial, stage)
+        else:
+            self._on_cell_clicked(0, 0)
+
+    def _on_unit_changed(self, unit: str):
+        """Handle time unit change (samples/seconds/ms) - replot with new X axis."""
+        if self.selected_cells:
+            trial, stage = self.selected_cells[-1]
+            self._on_cell_clicked(trial, stage)
+        else:
+            self._on_cell_clicked(0, 0)
     
+    def _on_layer_changed(self, layer_name: str):
+        """Handle layer dropdown change — switch data and refresh grid."""
+        try:
+            if layer_name == "All (avg)":
+                self.inspector.average_all_layers()
+            else:
+                self.inspector.switch_layer(layer_name)
+            self.grid_widget.populate(self.inspector)
+            # Re-plot the previously selected cell if any
+            if self.selected_cells:
+                trial, stage = self.selected_cells[-1]
+                self._on_cell_clicked(trial, stage)
+            else:
+                self._on_cell_clicked(0, 0)
+            self._update_status(f"Channel: {layer_name}")
+        except Exception as e:
+            self._update_status(f"Error switching layer: {e}")
+
     def _on_reset_view(self):
         """Reset epoch to full trace."""
         self.epoch_widget.reset()
