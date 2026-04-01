@@ -9,15 +9,18 @@ from .pipeline import Pipeline, Stage
 from .stateful_pipeline import StatefulPipeline, StatefulStage
 from .profiler import Profiler, ProfileReport, StageMetrics, profile_function
 from .inspector import Inspector
+from .segmenter import Segmenter, SegmentedData
 
 __all__ = [
-    "Pipeline", 
-    "Stage", 
-    "StatefulPipeline", 
-    "StatefulStage", 
+    "Pipeline",
+    "Stage",
+    "StatefulPipeline",
+    "StatefulStage",
     "Profiler",
     "ProfileReport",
     "StageMetrics",
     "profile_function",
     "Inspector",
+    "Segmenter",
+    "SegmentedData",
 ]
