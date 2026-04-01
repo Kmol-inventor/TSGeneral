@@ -1,6 +1,12 @@
-from tsgeneral import Inspector, Pipeline, StatefulPipeline
-from test.test_data.generators import generate_eeg_trials_by_samples
+import sys
+import os
 import debugpy
+
+# Add project root to path for development
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from tsgeneral import Inspector, Pipeline, StatefulPipeline
+from tests.test_data.generators import generate_eeg_trials_by_samples
 
 debugpy.listen(5678)  
 

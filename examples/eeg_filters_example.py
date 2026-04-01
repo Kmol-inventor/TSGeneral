@@ -12,10 +12,10 @@ import os
 
 # Add paths for development
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tests"))
 
 from tsgeneral import Inspector, StatefulPipeline
-from test.test_filters.bci_filters import EEGfilters
+from tests.test_filters.bci_filters import EEGfilters
 
 
 # =============================================================================

@@ -19,5 +19,5 @@ todo.txt
 docs/
 
 # Test folder (local development only)
-test/
-!test/test_data/Jaw_clench_5_readable.csv
+tests/
+!tests/test_data/Jaw_clench_5_readable.csv
