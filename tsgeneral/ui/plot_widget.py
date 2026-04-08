@@ -352,7 +352,7 @@ class PlotWidget(QWidget):
     def set_markers(
         self,
         markers: dict[str, float],
-        sample_rate: float | None = None,
+        sample_rate: Optional[float] = None,
     ):
         """Add vertical marker lines to the plot.
 
@@ -415,7 +415,7 @@ class PlotWidget(QWidget):
         if self.legend is not None:
             self.legend.clear()
     
-    def _update_axis_label(self, tm_type: str | None):
+    def _update_axis_label(self, tm_type: Optional[str]):
         """Update the X-axis label to match the current time unit."""
         if tm_type == "seconds":
             self.plot_widget.setLabel("bottom", "Time", units="s")
